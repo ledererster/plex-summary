@@ -28,8 +28,10 @@ var (
 	afterDate  = flag.String("after", "", "After date")
 	beforeDate = flag.String("before", "", "Before date")
 	today      = flag.Bool("today", false, "Summary for today")
-	yesterday  = flag.Bool("yesterday", false, "Summary for yesterday")
+	yesterday  = flag.Bool("yesterday", true, "Summary for yesterday")
 	lastWeek   = flag.Bool("last-week", false, "Summary for the last 7 days")
+	allTime    = flag.Bool("all", false, "Fetch all history (ignores date filters)")
+	dryRun     = flag.Bool("dry-run", false, "Don't send to Gotify")
 )
 
 const dateLayout = "2006-01-02"
@@ -67,11 +69,15 @@ type HistoryItem struct {
 	GrandparentTitle  string  `json:"grandparent_title"`
 }
 
+type HistoryData struct {
+	History       []HistoryItem `json:"data"`
+	TotalDuration string        `json:"filter_duration"`
+	TotalRecords  int           `json:"recordsFiltered"`
+}
+
 type HistoryResponse struct {
 	Response struct {
-		Data struct {
-			History []HistoryItem `json:"data"`
-		} `json:"data"`
+		Data HistoryData `json:"data"`
 	} `json:"response"`
 }
 
@@ -98,35 +104,40 @@ func validateDateFormat(dateStr string) {
 	}
 }
 
-func buildHistoryUrl() string {
-	flag.Parse()
+func buildHistoryUrl(start int) string {
 
 	params := make([]string, 0)
-	now := time.Now()
-	if *today {
-		*startDate = now.Format(dateLayout)
-	}
-	if *yesterday {
-		*startDate = now.AddDate(0, 0, -1).Format(dateLayout)
-	}
-	if *lastWeek {
-		*afterDate = now.AddDate(0, 0, -7).Format(dateLayout)
-	}
-	if *startDate != "" {
-		validateDateFormat(*startDate)
-		params = append(params, "start_date="+*startDate)
-	}
-	if *afterDate != "" {
-		validateDateFormat(*afterDate)
-		params = append(params, "after="+*afterDate)
-	}
-	if *beforeDate != "" {
-		validateDateFormat(*beforeDate)
-		params = append(params, "before="+*beforeDate)
+
+	if !*allTime {
+		now := time.Now()
+		if *today {
+			*startDate = now.Format(dateLayout)
+		}
+		if *yesterday {
+			*startDate = now.AddDate(0, 0, -1).Format(dateLayout)
+		}
+		if *lastWeek {
+			*afterDate = now.AddDate(0, 0, -7).Format(dateLayout)
+		}
+		if *startDate != "" {
+			validateDateFormat(*startDate)
+			params = append(params, "start_date="+*startDate)
+		}
+		if *afterDate != "" {
+			validateDateFormat(*afterDate)
+			params = append(params, "after="+*afterDate)
+		}
+		if *beforeDate != "" {
+			validateDateFormat(*beforeDate)
+			params = append(params, "before="+*beforeDate)
+		}
 	}
 
 	// Add fixed length param
 	params = append(params, "length=100")
+
+	//add start
+	params = append(params, "start="+strconv.Itoa(start))
 
 	return fmt.Sprintf("%s/api/v2?apikey=%s&cmd=get_history&%s",
 		config.TautulliURL,
@@ -136,14 +147,14 @@ func buildHistoryUrl() string {
 }
 
 func main() {
+	flag.Parse()
 
-	history, err := fetchHistory(buildHistoryUrl())
+	history, err := fetchAllHistory()
 	if err != nil {
 		log.Fatal("Failed to fetch history:", err)
 	}
 
 	summary := generateSummary(history)
-	fmt.Print(summary)
 
 	var title string
 
@@ -156,13 +167,21 @@ func main() {
 		title = fmt.Sprintf("📅 Plex activity since %s\n\n", *afterDate)
 	case *beforeDate != "":
 		title = fmt.Sprintf("📅 Plex activity until %s\n\n", *beforeDate)
+	default:
+		title = "📅 Plex activity summary\n\n"
 	}
-	if err := sendToGotify(title, summary); err != nil {
-		log.Fatal("Gotify send failed:", err)
+	if *dryRun {
+		fmt.Print(title)
+		fmt.Print(summary)
+	}
+	if !*dryRun {
+		if err := sendToGotify(title, summary); err != nil {
+			log.Fatal("Gotify send failed:", err)
+		}
 	}
 }
 
-func fetchHistory(url string) ([]HistoryItem, error) {
+func fetchHistory(url string) (*HistoryData, error) {
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -177,10 +196,38 @@ func fetchHistory(url string) ([]HistoryItem, error) {
 		return nil, err
 	}
 
-	return result.Response.Data.History, nil
+	return &result.Response.Data, nil
 }
 
-func generateSummary(items []HistoryItem) string {
+func fetchAllHistory() (*HistoryData, error) {
+	var allItems []HistoryItem
+	var totalDuration string
+	var totalRecords int
+
+	for start := 0; ; start += 100 {
+		data, err := fetchHistory(buildHistoryUrl(start))
+		if err != nil {
+			return nil, err
+		}
+		allItems = append(allItems, data.History...)
+		if totalDuration == "" {
+			totalDuration = data.TotalDuration
+			totalRecords = data.TotalRecords
+		}
+		if start >= totalRecords || len(data.History) == 0 {
+			break
+		}
+	}
+
+	return &HistoryData{
+		History:       allItems,
+		TotalDuration: totalDuration,
+		TotalRecords:  totalRecords,
+	}, nil
+}
+
+func generateSummary(data *HistoryData) string {
+	items := data.History
 	userSummaries := make(map[string][]string)
 	userDurations := make(map[string]int)
 	liveByShow := make(map[string]int)
@@ -219,6 +266,8 @@ func generateSummary(items []HistoryItem) string {
 		}
 		builder.WriteString("\n")
 	}
+
+	builder.WriteString(fmt.Sprintf("🕒 Total duration: %s\n", data.TotalDuration))
 
 	return builder.String()
 }
