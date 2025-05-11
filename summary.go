@@ -28,7 +28,7 @@ var (
 	afterDate  = flag.String("after", "", "After date")
 	beforeDate = flag.String("before", "", "Before date")
 	today      = flag.Bool("today", false, "Summary for today")
-	yesterday  = flag.Bool("yesterday", true, "Summary for yesterday")
+	yesterday  = flag.Bool("yesterday", false, "Summary for yesterday")
 	lastWeek   = flag.Bool("last-week", false, "Summary for the last 7 days")
 	allTime    = flag.Bool("all", false, "Fetch all history (ignores date filters)")
 	dryRun     = flag.Bool("dry-run", false, "Don't send to Gotify")
@@ -109,6 +109,10 @@ func buildHistoryUrl(start int) string {
 	params := make([]string, 0)
 
 	if !*allTime {
+		// Default to yesterday if no date filters are set
+		if *startDate == "" && *afterDate == "" && *beforeDate == "" && !*today && !*lastWeek {
+			*yesterday = true
+		}
 		now := time.Now()
 		if *today {
 			*startDate = now.Format(dateLayout)
