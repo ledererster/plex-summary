@@ -54,11 +54,16 @@ type ActiveResponse struct {
 	Response struct {
 		Data struct {
 			Sessions []struct {
-				User      string `json:"username"`
-				Title     string `json:"title"`
-				MediaType string `json:"media_type"`
-				Player    string `json:"player"`
-				Platform  string `json:"platform"`
+				User             string `json:"username"`
+				Title            string `json:"title"`
+				GrandparentTitle string `json:"grandparent_title"`
+				MediaType        string `json:"media_type"`
+				Player           string `json:"player"`
+				Platform         string `json:"platform"`
+				DurationStr      string `json:"duration"`
+				ViewOffsetStr    string `json:"view_offset"`
+				SeasonStr        string `json:"parent_media_index"`
+				EpisodeStr       string `json:"media_index"`
 			} `json:"sessions"`
 		} `json:"data"`
 	} `json:"response"`
@@ -227,7 +232,26 @@ func fetchActiveSessions() (string, error) {
 
 	var b strings.Builder
 	for _, s := range sessions {
-		fmt.Fprintf(&b, "▶️ %s is watching %s (%s) on %s [%s]\n", s.User, s.Title, s.MediaType, s.Player, s.Platform)
+		duration, _ := strconv.Atoi(s.DurationStr) //get_activity returns it all as strings for some reason
+		offset, _ := strconv.Atoi(s.ViewOffsetStr)
+		season, _ := strconv.Atoi(s.SeasonStr)
+		episode, _ := strconv.Atoi(s.EpisodeStr)
+
+		durationMin := duration / 60000
+		var progress float64
+		if duration > 0 {
+			progress = float64(offset) / float64(duration) * 100
+		}
+
+		var title string
+		if s.MediaType == "episode" && s.GrandparentTitle != "" {
+			title = fmt.Sprintf("%s - %s S%02dE%02d", s.GrandparentTitle, s.Title, season, episode)
+		} else {
+			title = s.Title
+		}
+
+		fmt.Fprintf(&b, "▶️ %s is watching %s on %s [%s] for ~%d min [%.0f%% Watched]\n",
+			s.User, title, s.Player, s.Platform, durationMin, progress)
 	}
 	return b.String(), nil
 }
