@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"regexp"
 )
 
 const dateLayout = "2006-01-02"
@@ -112,7 +113,7 @@ func fetchHistory(url string) (*HistoryData, error) {
 
 func fetchAllHistory(opts HistoryRequest) (*HistoryData, error) {
 	var allItems []HistoryItem
-	var totalDuration string
+	var totalDuration time.Duration
 	var totalRecords int
 
 	for start := 0; ; start += 100 {
@@ -123,8 +124,13 @@ func fetchAllHistory(opts HistoryRequest) (*HistoryData, error) {
 		}
 
 		allItems = append(allItems, data.History...)
-		if totalDuration == "" {
-			totalDuration = data.TotalDuration
+		if data.TotalDuration != "" {
+			dur, err := parseCustomDuration(data.TotalDuration)
+			if err == nil {
+				totalDuration += dur
+			}
+		}
+		if totalRecords == 0 {
 			totalRecords = data.TotalRecords
 		}
 		if start >= totalRecords || len(data.History) == 0 {
@@ -134,7 +140,7 @@ func fetchAllHistory(opts HistoryRequest) (*HistoryData, error) {
 
 	return &HistoryData{
 		History:       allItems,
-		TotalDuration: totalDuration,
+		TotalDuration: formatCustomDuration(totalDuration),
 		TotalRecords:  totalRecords,
 	}, nil
 }
@@ -254,4 +260,39 @@ func fetchActiveSessions() (string, error) {
 			s.User, title, s.Player, s.Platform, durationMin, progress)
 	}
 	return b.String(), nil
+}
+func parseCustomDuration(s string) (time.Duration, error) {
+	var total time.Duration
+	re := regexp.MustCompile(`(\d+)\s*(days?|hrs?|mins?)`)
+	matches := re.FindAllStringSubmatch(s, -1)
+
+	for _, match := range matches {
+		val, _ := strconv.Atoi(match[1])
+		switch match[2] {
+		case "day", "days":
+			total += time.Duration(val) * 24 * time.Hour
+		case "hr", "hrs":
+			total += time.Duration(val) * time.Hour
+		case "min", "mins":
+			total += time.Duration(val) * time.Minute
+		}
+	}
+	return total, nil
+}
+func formatCustomDuration(d time.Duration) string {
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	mins := int(d.Minutes()) % 60
+
+	var parts []string
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%d days", days))
+	}
+	if hours > 0 {
+		parts = append(parts, fmt.Sprintf("%d hrs", hours))
+	}
+	if mins > 0 {
+		parts = append(parts, fmt.Sprintf("%d mins", mins))
+	}
+	return strings.Join(parts, " ")
 }
