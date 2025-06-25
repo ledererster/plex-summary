@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
-	"regexp"
 )
 
 const dateLayout = "2006-01-02"
@@ -263,7 +263,7 @@ func fetchActiveSessions() (string, error) {
 }
 func parseCustomDuration(s string) (time.Duration, error) {
 	var total time.Duration
-	re := regexp.MustCompile(`(\d+)\s*(days?|hrs?|mins?)`)
+	re := regexp.MustCompile(`(\d+)\s*(days?|hrs?|mins?|secs?)`)
 	matches := re.FindAllStringSubmatch(s, -1)
 
 	for _, match := range matches {
@@ -275,6 +275,8 @@ func parseCustomDuration(s string) (time.Duration, error) {
 			total += time.Duration(val) * time.Hour
 		case "min", "mins":
 			total += time.Duration(val) * time.Minute
+		case "sec", "secs":
+			total += time.Duration(val) * time.Second
 		}
 	}
 	return total, nil
@@ -283,6 +285,7 @@ func formatCustomDuration(d time.Duration) string {
 	days := int(d.Hours()) / 24
 	hours := int(d.Hours()) % 24
 	mins := int(d.Minutes()) % 60
+	secs := int(d.Seconds()) % 60
 
 	var parts []string
 	if days > 0 {
@@ -293,6 +296,9 @@ func formatCustomDuration(d time.Duration) string {
 	}
 	if mins > 0 {
 		parts = append(parts, fmt.Sprintf("%d mins", mins))
+	}
+	if secs > 0 {
+		parts = append(parts, fmt.Sprintf("%d secs", secs))
 	}
 	return strings.Join(parts, " ")
 }
