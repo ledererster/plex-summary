@@ -21,7 +21,7 @@ func StartScheduler() {
 			log.Println("Scheduler error:", err)
 			return
 		}
-		summary := generateSummary(history)
+		summary := generateSummary(history, false)
 		if err := sendToGotify("📅 Daily Plex Summary", summary); err != nil {
 			log.Println("Gotify error:", err)
 		}

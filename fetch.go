@@ -18,6 +18,7 @@ type HistoryRequest struct {
 	AfterDate  string
 	BeforeDate string
 	AllTime    bool
+	Compressed bool
 }
 
 type HistoryItem struct {

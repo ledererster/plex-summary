@@ -30,7 +30,7 @@ func runOnce(dateArg string) {
 	if err != nil {
 		log.Fatal("Fetch error:", err)
 	}
-	summary := generateSummary(history)
+	summary := generateSummary(history, false)
 	if err := sendToGotify("📅 Plex summary", summary); err != nil {
 		log.Fatal("Gotify error:", err)
 	}

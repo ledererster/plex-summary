@@ -90,11 +90,18 @@ func StartTelegramBot() {
 				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /range YYYY-MM-DD YYYY-MM-DD"))
 				continue
 			}
-			opts := HistoryRequest{AfterDate: dates[0], BeforeDate: dates[1]}
+			opts := HistoryRequest{
+				AfterDate:  dates[0],
+				BeforeDate: dates[1],
+				Compressed: true, // 👈 enable compression
+			}
 			sendTelegramSummary(bot, update.Message.Chat.ID, opts)
 
 		case "all":
-			opts := HistoryRequest{AllTime: true}
+			opts := HistoryRequest{
+				AllTime:    true,
+				Compressed: true, // 👈 enable compression
+			}
 			sendTelegramSummary(bot, update.Message.Chat.ID, opts)
 
 		case "active":
@@ -114,7 +121,7 @@ func sendTelegramSummary(bot *tgbotapi.BotAPI, chatID int64, opts HistoryRequest
 		return
 	}
 
-	summary := generateSummary(data)
+	summary := generateSummary(data, opts.Compressed)
 	chunks := splitMessage(summary, 4096)
 
 	for _, chunk := range chunks {
